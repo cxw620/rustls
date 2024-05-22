@@ -192,6 +192,12 @@ pub struct UnknownExtension {
 }
 
 impl UnknownExtension {
+    pub fn get_payload(&self) -> &Payload<'static> {
+        &self.payload
+    }
+}
+
+impl UnknownExtension {
     fn encode(&self, bytes: &mut Vec<u8>) {
         self.payload.encode(bytes);
     }
@@ -215,7 +221,7 @@ impl TlsListElement for SignatureScheme {
 }
 
 #[derive(Clone, Debug)]
-pub(crate) enum ServerNamePayload {
+pub enum ServerNamePayload {
     HostName(DnsName<'static>),
     IpAddress(PayloadU16),
     Unknown(Payload<'static>),
@@ -259,6 +265,12 @@ impl ServerNamePayload {
 pub struct ServerName {
     pub(crate) typ: ServerNameType,
     pub(crate) payload: ServerNamePayload,
+}
+
+impl ServerName {
+    pub fn get_payload(&self) -> &ServerNamePayload {
+        &self.payload
+    }
 }
 
 impl Codec<'_> for ServerName {
@@ -355,6 +367,12 @@ pub struct KeyShareEntry {
 }
 
 impl KeyShareEntry {
+    pub fn get_payload(&self) -> &[u8] {
+        &self.payload.0
+    }
+}
+
+impl KeyShareEntry {
     pub fn new(group: NamedGroup, payload: impl Into<Vec<u8>>) -> Self {
         Self {
             group,
@@ -383,9 +401,9 @@ impl Codec<'_> for KeyShareEntry {
 
 // --- TLS 1.3 PresharedKey offers ---
 #[derive(Clone, Debug)]
-pub(crate) struct PresharedKeyIdentity {
-    pub(crate) identity: PayloadU16,
-    pub(crate) obfuscated_ticket_age: u32,
+pub struct PresharedKeyIdentity {
+    pub identity: PayloadU16,
+    pub obfuscated_ticket_age: u32,
 }
 
 impl PresharedKeyIdentity {
@@ -415,7 +433,7 @@ impl TlsListElement for PresharedKeyIdentity {
     const SIZE_LEN: ListLength = ListLength::U16;
 }
 
-wrapped_payload!(pub(crate) struct PresharedKeyBinder, PayloadU8,);
+wrapped_payload!(pub struct PresharedKeyBinder, PayloadU8,);
 
 impl TlsListElement for PresharedKeyBinder {
     const SIZE_LEN: ListLength = ListLength::U16;
@@ -423,8 +441,8 @@ impl TlsListElement for PresharedKeyBinder {
 
 #[derive(Clone, Debug)]
 pub struct PresharedKeyOffer {
-    pub(crate) identities: Vec<PresharedKeyIdentity>,
-    pub(crate) binders: Vec<PresharedKeyBinder>,
+    pub identities: Vec<PresharedKeyIdentity>,
+    pub binders: Vec<PresharedKeyBinder>,
 }
 
 impl PresharedKeyOffer {
@@ -565,7 +583,7 @@ pub enum ClientExtension {
 }
 
 impl ClientExtension {
-    pub(crate) fn ext_type(&self) -> ExtensionType {
+    pub fn ext_type(&self) -> ExtensionType {
         match *self {
             Self::EcPointFormats(_) => ExtensionType::ECPointFormats,
             Self::NamedGroups(_) => ExtensionType::EllipticCurves,
@@ -937,7 +955,7 @@ impl ClientHelloPayload {
 
     /// Returns true if there is more than one extension of a given
     /// type.
-    pub(crate) fn has_duplicate_extension(&self) -> bool {
+    pub fn has_duplicate_extension(&self) -> bool {
         has_duplicates::<_, _, u16>(
             self.extensions
                 .iter()
@@ -945,13 +963,13 @@ impl ClientHelloPayload {
         )
     }
 
-    pub(crate) fn find_extension(&self, ext: ExtensionType) -> Option<&ClientExtension> {
+    pub fn find_extension(&self, ext: ExtensionType) -> Option<&ClientExtension> {
         self.extensions
             .iter()
             .find(|x| x.ext_type() == ext)
     }
 
-    pub(crate) fn sni_extension(&self) -> Option<&[ServerName]> {
+    pub fn sni_extension(&self) -> Option<&[ServerName]> {
         let ext = self.find_extension(ExtensionType::ServerName)?;
         match *ext {
             // Does this comply with RFC6066?
@@ -983,7 +1001,7 @@ impl ClientHelloPayload {
         }
     }
 
-    pub(crate) fn namedgroups_extension(&self) -> Option<&[NamedGroup]> {
+    pub fn namedgroups_extension(&self) -> Option<&[NamedGroup]> {
         let ext = self.find_extension(ExtensionType::EllipticCurves)?;
         match *ext {
             ClientExtension::NamedGroups(ref req) => Some(req),
@@ -992,7 +1010,7 @@ impl ClientHelloPayload {
     }
 
     #[cfg(feature = "tls12")]
-    pub(crate) fn ecpoints_extension(&self) -> Option<&[ECPointFormat]> {
+    pub fn ecpoints_extension(&self) -> Option<&[ECPointFormat]> {
         let ext = self.find_extension(ExtensionType::ECPointFormats)?;
         match *ext {
             ClientExtension::EcPointFormats(ref req) => Some(req),
@@ -1000,7 +1018,7 @@ impl ClientHelloPayload {
         }
     }
 
-    pub(crate) fn alpn_extension(&self) -> Option<&Vec<ProtocolName>> {
+    pub fn alpn_extension(&self) -> Option<&Vec<ProtocolName>> {
         let ext = self.find_extension(ExtensionType::ALProtocolNegotiation)?;
         match *ext {
             ClientExtension::Protocols(ref req) => Some(req),
@@ -1008,7 +1026,7 @@ impl ClientHelloPayload {
         }
     }
 
-    pub(crate) fn quic_params_extension(&self) -> Option<Vec<u8>> {
+    pub fn quic_params_extension(&self) -> Option<Vec<u8>> {
         let ext = self
             .find_extension(ExtensionType::TransportParameters)
             .or_else(|| self.find_extension(ExtensionType::TransportParametersDraft))?;
@@ -1020,11 +1038,11 @@ impl ClientHelloPayload {
     }
 
     #[cfg(feature = "tls12")]
-    pub(crate) fn ticket_extension(&self) -> Option<&ClientExtension> {
+    pub fn ticket_extension(&self) -> Option<&ClientExtension> {
         self.find_extension(ExtensionType::SessionTicket)
     }
 
-    pub(crate) fn versions_extension(&self) -> Option<&[ProtocolVersion]> {
+    pub fn versions_extension(&self) -> Option<&[ProtocolVersion]> {
         let ext = self.find_extension(ExtensionType::SupportedVersions)?;
         match *ext {
             ClientExtension::SupportedVersions(ref vers) => Some(vers),
@@ -1052,7 +1070,7 @@ impl ClientHelloPayload {
             .unwrap_or_default()
     }
 
-    pub(crate) fn psk(&self) -> Option<&PresharedKeyOffer> {
+    pub fn psk(&self) -> Option<&PresharedKeyOffer> {
         let ext = self.find_extension(ExtensionType::PreSharedKey)?;
         match *ext {
             ClientExtension::PresharedKey(ref psk) => Some(psk),
@@ -1060,13 +1078,13 @@ impl ClientHelloPayload {
         }
     }
 
-    pub(crate) fn check_psk_ext_is_last(&self) -> bool {
+    pub fn check_psk_ext_is_last(&self) -> bool {
         self.extensions
             .last()
             .map_or(false, |ext| ext.ext_type() == ExtensionType::PreSharedKey)
     }
 
-    pub(crate) fn psk_modes(&self) -> Option<&[PSKKeyExchangeMode]> {
+    pub fn psk_modes(&self) -> Option<&[PSKKeyExchangeMode]> {
         let ext = self.find_extension(ExtensionType::PSKKeyExchangeModes)?;
         match *ext {
             ClientExtension::PresharedKeyModes(ref psk_modes) => Some(psk_modes),
@@ -1074,13 +1092,13 @@ impl ClientHelloPayload {
         }
     }
 
-    pub(crate) fn psk_mode_offered(&self, mode: PSKKeyExchangeMode) -> bool {
+    pub fn psk_mode_offered(&self, mode: PSKKeyExchangeMode) -> bool {
         self.psk_modes()
             .map(|modes| modes.contains(&mode))
             .unwrap_or(false)
     }
 
-    pub(crate) fn set_psk_binder(&mut self, binder: impl Into<Vec<u8>>) {
+    pub fn set_psk_binder(&mut self, binder: impl Into<Vec<u8>>) {
         let last_extension = self.extensions.last_mut();
         if let Some(ClientExtension::PresharedKey(ref mut offer)) = last_extension {
             offer.binders[0] = PresharedKeyBinder::from(binder.into());
@@ -1088,12 +1106,12 @@ impl ClientHelloPayload {
     }
 
     #[cfg(feature = "tls12")]
-    pub(crate) fn ems_support_offered(&self) -> bool {
+    pub fn ems_support_offered(&self) -> bool {
         self.find_extension(ExtensionType::ExtendedMasterSecret)
             .is_some()
     }
 
-    pub(crate) fn early_data_extension_offered(&self) -> bool {
+    pub fn early_data_extension_offered(&self) -> bool {
         self.find_extension(ExtensionType::EarlyData)
             .is_some()
     }
