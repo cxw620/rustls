@@ -1002,6 +1002,11 @@ impl Accepted {
         ch
     }
 
+    /// Get the [`ClientHelloPayload`] for this connection.
+    pub fn raw_client_hello(&self) -> &ClientHelloPayload {
+        Self::client_hello_payload(&self.message)
+    }
+
     /// Convert the [`Accepted`] into a [`ServerConnection`].
     ///
     /// Takes the state returned from [`Acceptor::accept()`] as well as the [`ServerConfig`] and

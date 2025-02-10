@@ -489,6 +489,9 @@ pub mod internal {
                 HpkeKeyConfig, HpkeSymmetricCipherSuite, KeyShareEntry, Random, ServerExtension,
                 SessionId,
             };
+            pub use crate::msgs::handshake::{
+                PresharedKeyBinder, PresharedKeyIdentity, ServerHelloPayload, ServerNamePayload,
+            };
         }
         pub mod message {
             pub use crate::msgs::message::{
