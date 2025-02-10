@@ -19,7 +19,7 @@ pub struct Reader<'a> {
 impl<'a> Reader<'a> {
     /// Creates a new Reader of the provided `bytes` slice with
     /// the initial cursor position of zero.
-    pub fn init(bytes: &'a [u8]) -> Self {
+    pub const fn init(bytes: &'a [u8]) -> Self {
         Reader {
             buffer: bytes,
             cursor: 0,
@@ -61,11 +61,11 @@ impl<'a> Reader<'a> {
 
     /// Used to check whether the reader has any content left
     /// after the cursor (cursor has not reached end of buffer)
-    pub fn any_left(&self) -> bool {
+    pub const fn any_left(&self) -> bool {
         self.cursor < self.buffer.len()
     }
 
-    pub fn expect_empty(&self, name: &'static str) -> Result<(), InvalidMessage> {
+    pub const fn expect_empty(&self, name: &'static str) -> Result<(), InvalidMessage> {
         match self.any_left() {
             true => Err(InvalidMessage::TrailingData(name)),
             false => Ok(()),
@@ -74,13 +74,13 @@ impl<'a> Reader<'a> {
 
     /// Returns the cursor position which is also the number
     /// of bytes that have been read from the buffer.
-    pub fn used(&self) -> usize {
+    pub const fn used(&self) -> usize {
         self.cursor
     }
 
     /// Returns the number of bytes that are still able to be
     /// read (The number of remaining takes)
-    pub fn left(&self) -> usize {
+    pub const fn left(&self) -> usize {
         self.buffer.len() - self.cursor
     }
 }
