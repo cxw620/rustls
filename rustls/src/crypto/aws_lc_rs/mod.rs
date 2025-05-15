@@ -274,6 +274,20 @@ mod ring_shim {
             Ok(SharedSecret::from(secret))
         })
     }
+
+    #[cfg(feature = "reality")]
+    pub(super) fn agree_ephemeral_ref(
+        priv_key: &ring_like::agreement::EphemeralPrivateKey,
+        peer_key: ring_like::agreement::UnparsedPublicKey<[u8; 32]>,
+    ) -> Result<[u8; 32], ()> {
+        ring_like::agreement::agree_ephemeral_ref(priv_key, &peer_key, (), |secret| {
+            let mut key_share = [0u8; 32];
+
+            key_share.copy_from_slice(secret);
+
+            Ok(key_share)
+        })
+    }
 }
 
 /// Are we in FIPS mode?

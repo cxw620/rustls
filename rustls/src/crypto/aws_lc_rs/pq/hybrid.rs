@@ -145,6 +145,10 @@ impl ActiveKeyExchange for ActiveHybrid {
     fn group(&self) -> NamedGroup {
         self.name
     }
+
+    fn ecdh(&self, reality_public_key: [u8; 32]) -> Result<[u8; 32], Error> {
+        self.classical.ecdh(reality_public_key)
+    }
 }
 
 #[derive(Clone, Copy, Debug)]

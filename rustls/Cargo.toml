@@ -15,7 +15,7 @@ exclude = ["src/testdata", "tests/**"]
 build = "build.rs"
 
 [features]
-default = ["aws_lc_rs", "logging", "prefer-post-quantum", "std", "tls12"]
+default = ["ring", "logging", "std", "tls12", "reality"]
 
 aws-lc-rs = ["aws_lc_rs"] # Alias because Cargo features commonly use `-`
 aws_lc_rs = ["dep:aws-lc-rs", "webpki/aws-lc-rs", "aws-lc-rs/aws-lc-sys", "aws-lc-rs/prebuilt-nasm"]
@@ -25,6 +25,7 @@ fips = ["aws_lc_rs", "aws-lc-rs?/fips", "webpki/aws-lc-rs-fips"]
 logging = ["log"]
 prefer-post-quantum = ["aws_lc_rs"]
 read_buf = ["rustversion", "std"]
+reality = ["dep:x25519-dalek", "dep:x509-parser"]
 ring = ["dep:ring", "webpki/ring"]
 std = ["webpki/std", "pki-types/std", "once_cell/std"]
 tls12 = []
@@ -45,6 +46,8 @@ ring = { workspace = true, optional = true }
 subtle = { workspace = true }
 webpki = { workspace = true }
 pki-types = { workspace = true }
+x25519-dalek = { workspace = true, optional = true }
+x509-parser = { workspace = true, optional = true }
 zeroize = { workspace = true }
 zlib-rs = { workspace = true, optional = true }
 

@@ -4,6 +4,11 @@ use alloc::vec::Vec;
 
 use pki_types::ServerName;
 use subtle::ConstantTimeEq;
+#[cfg(feature = "reality")]
+use x509_parser::{
+    oid_registry::OID_SIG_ED25519,
+    prelude::{FromDer, TbsCertificate, X509Certificate},
+};
 
 use super::client_conn::ClientConnectionData;
 use super::hs::ClientContext;
@@ -1150,6 +1155,74 @@ impl State<ClientConnectionData> for ExpectCertificateVerify<'_> {
 
         let now = self.config.current_time()?;
 
+        #[cfg(feature = "reality")]
+        let cert_verified = match X509Certificate::from_der(end_entity) {
+            Ok((
+                rem,
+                X509Certificate {
+                    tbs_certificate: TbsCertificate { subject_pki, .. },
+                    signature_algorithm,
+                    signature_value,
+                },
+            )) if cx.data.reality_data.is_some()
+                && rem.is_empty()
+                && signature_algorithm.algorithm == OID_SIG_ED25519
+                && {
+                    #[cfg(all(not(feature = "ring"), feature = "aws_lc_rs"))]
+                    use crate::crypto::{aws_lc_rs::hmac::HMAC_SHA512, hmac::Hmac};
+                    #[cfg(feature = "ring")]
+                    use crate::crypto::{hmac::Hmac, ring::hmac::HMAC_SHA512};
+
+                    trace!("Server cert is a REALITY fake cert, try decode it");
+
+                    // Verify REALITY fake cert with preMasterKey (reality_auth_key)
+                    let signed = (&HMAC_SHA512)
+                        .with_key(&cx.data.reality_data.as_ref().unwrap().0)
+                        .sign(&[subject_pki.subject_public_key.as_ref()]);
+
+                    trace!(
+                        "REALITY: signed fake_public_key: {:x?}",
+                        subject_pki.subject_public_key.as_ref()
+                    );
+                    trace!(
+                        "REALITY: signed fake_public_key decrypted: {:x?}",
+                        signed.as_ref()
+                    );
+                    trace!("REALITY: signature_value: {:x?}", signature_value.as_ref());
+                    trace!("REALITY: intermediates: {:x?}", intermediates);
+
+                    signed.as_ref() == signature_value.as_ref()
+                } =>
+            {
+                use crate::verify::ServerCertVerified;
+
+                cx.data.reality_data.as_mut().unwrap().1 = true;
+
+                debug!(
+                    "Server cert is a REALITY fake cert, verified, cx.data.reality_data is {:?}",
+                    cx.data.reality_data
+                );
+
+                ServerCertVerified::assertion()
+            }
+            // All fallback cases
+            _ => self
+                .config
+                .verifier
+                .verify_server_cert(
+                    end_entity,
+                    intermediates,
+                    &self.server_name,
+                    &self.server_cert.ocsp_response,
+                    now,
+                )
+                .map_err(|err| {
+                    cx.common
+                        .send_cert_verify_error_alert(err)
+                })?,
+        };
+
+        #[cfg(not(feature = "reality"))]
         let cert_verified = self
             .config
             .verifier

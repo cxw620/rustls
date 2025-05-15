@@ -277,7 +277,7 @@ pub struct AeadKey {
 }
 
 impl AeadKey {
-    #[cfg(feature = "tls12")]
+    #[cfg(any(feature = "tls12", feature = "reality"))]
     pub(crate) fn new(buf: &[u8]) -> Self {
         debug_assert!(buf.len() <= Self::MAX_LEN);
         let mut key = Self::from([0u8; Self::MAX_LEN]);

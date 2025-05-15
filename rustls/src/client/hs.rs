@@ -156,7 +156,57 @@ pub(super) fn start_handshake(
         Some(session_id) => session_id,
         None if cx.common.is_quic() => SessionId::empty(),
         None if !config.supports_version(ProtocolVersion::TLSv1_3) => SessionId::empty(),
-        None => SessionId::random(config.provider.secure_random)?,
+        None => {
+            #[allow(unused_mut)]
+            let mut session_id = SessionId::random(config.provider.secure_random)?;
+
+            #[cfg(feature = "reality")]
+            if let Some((_, short_id, (version_x, version_y, vertion_z))) = config.reality {
+                // Client version
+                {
+                    session_id[0] = version_x;
+                    session_id[1] = version_y;
+                    session_id[2] = vertion_z;
+                    session_id[3] = 0;
+                }
+
+                // Timestamp, 4 bytes, but u32? emmm
+                {
+                    // inspect_err is availible since 1.76
+                    let now = config
+                        .current_time()
+                        .map_err(|err| {
+                            debug!("Could not get current time: {err}");
+
+                            err
+                        })?
+                        .as_secs() as u32;
+
+                    let now_bytes = now.to_be_bytes();
+                    session_id[4] = now_bytes[0];
+                    session_id[5] = now_bytes[1];
+                    session_id[6] = now_bytes[2];
+                    session_id[7] = now_bytes[3];
+                }
+
+                // Short ID, 8 bytes
+                {
+                    let short_id = short_id.to_be_bytes();
+                    session_id[8] = short_id[0];
+                    session_id[9] = short_id[1];
+                    session_id[10] = short_id[2];
+                    session_id[11] = short_id[3];
+                    session_id[12] = short_id[4];
+                    session_id[13] = short_id[5];
+                    session_id[14] = short_id[6];
+                    session_id[15] = short_id[7];
+                }
+
+                trace!("REALITY session_id: {session_id:?}");
+            }
+
+            session_id
+        }
     };
 
     let random = Random::new(config.provider.secure_random)?;
@@ -322,6 +372,28 @@ fn emit_client_hello_for_retry(
 
     if let Some(key_share) = &key_share {
         debug_assert!(supported_versions.tls13);
+
+        #[cfg(feature = "reality")]
+        if let Some((reality_public_key, ..)) = config.reality {
+            use crate::crypto::ring::hmac;
+            use crate::crypto::tls13::Hkdf;
+            use crate::crypto::tls13::HkdfUsingHmac;
+            use crate::crypto::tls13::expand;
+
+            let hkdf = HkdfUsingHmac(&hmac::HMAC_SHA256);
+
+            let auth_key: [u8; 32] = expand(
+                hkdf.extract_from_secret(
+                    Some(&input.random.as_ref()[..20]),
+                    &key_share.ecdh(reality_public_key)?,
+                )
+                .as_ref(),
+                &[b"REALITY"],
+            );
+
+            cx.data.reality_data = Some((auth_key, false));
+        }
+
         let mut shares = vec![KeyShareEntry::new(key_share.group(), key_share.pub_key())];
 
         if !retryreq
@@ -451,6 +523,13 @@ fn emit_client_hello_for_retry(
     // We don't do renegotiation at all, in fact.
     cipher_suites.push(CipherSuite::TLS_EMPTY_RENEGOTIATION_INFO_SCSV);
 
+    #[cfg(feature = "reality")]
+    let aes_gcm_preferred = cipher_suites.iter().any(|c| {
+        c.as_str()
+            .unwrap_or_default()
+            .contains("GCM")
+    });
+
     let mut chp_payload = ClientHelloPayload {
         client_version: ProtocolVersion::TLSv1_2,
         random: input.random,
@@ -531,7 +610,8 @@ fn emit_client_hello_for_retry(
         _ => None,
     };
 
-    let ch = Message {
+    #[allow(unused_mut)]
+    let mut ch = Message {
         version: match retryreq {
             // <https://datatracker.ietf.org/doc/html/rfc8446#section-5.1>:
             // "This value MUST be set to 0x0303 for all records generated
@@ -544,6 +624,72 @@ fn emit_client_hello_for_retry(
             // (retryreq == None means we're in the "initial ClientHello" case)
             None => ProtocolVersion::TLSv1_0,
         },
+        #[cfg(feature = "reality")]
+        payload: {
+            use crate::crypto::cipher::AeadKey;
+            use crate::msgs::codec::Codec;
+
+            if cx.data.reality_data.is_none() {
+                MessagePayload::handshake(chp)
+            } else {
+                let mut raw_session_id = SessionId::new_zeroed();
+
+                {
+                    // F**k borrow checker!
+                    let HandshakePayload::ClientHello(chp_payload) = &mut chp.payload else {
+                        unreachable!()
+                    };
+
+                    core::mem::swap(&mut chp_payload.session_id, &mut raw_session_id);
+                }
+
+                let nonce = {
+                    let HandshakePayload::ClientHello(chp_payload) = &chp.payload else {
+                        unreachable!()
+                    };
+
+                    &chp_payload.random.as_ref()[20..]
+                };
+
+                let mut raw_client_hello = chp.get_encoding();
+
+                let auth_key = cx.data.reality_data.unwrap().0;
+
+                trace!("REALITY: auth_key[..16] {:x?}", &auth_key[..16]);
+                trace!("REALITY: nonce {:x?}", nonce);
+                trace!("REALITY: raw_session_id {:x?}", raw_session_id);
+                trace!("REALITY: raw_client_hello {:x?}", raw_client_hello);
+
+                // AEAD, nonce: random, message: session_id, aad: ClientHello with session_id all 0
+                // fixed length: 4 (0..4) + 2 (4..6) + random (32, 6..38) + session_id (1, 38; 32, 39..71);
+
+                let encrypted = AeadKey::new(&auth_key).encrypt(
+                    nonce,
+                    &raw_session_id[..16],
+                    &raw_client_hello,
+                    aes_gcm_preferred,
+                )?;
+
+                trace!("REALITY: encrypted {encrypted:x?}",);
+
+                {
+                    let HandshakePayload::ClientHello(chp_payload) = &mut chp.payload else {
+                        unreachable!()
+                    };
+
+                    let _ =
+                        core::mem::replace(&mut chp_payload.session_id, SessionId::new(&encrypted));
+                }
+
+                raw_client_hello[39..71].copy_from_slice(&encrypted);
+
+                MessagePayload::Handshake {
+                    encoded: Payload::new(raw_client_hello),
+                    parsed: chp,
+                }
+            }
+        },
+        #[cfg(not(feature = "reality"))]
         payload: MessagePayload::handshake(chp),
     };
 

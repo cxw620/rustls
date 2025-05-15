@@ -149,6 +149,23 @@ impl ActiveKeyExchange for KeyExchange {
     fn pub_key(&self) -> &[u8] {
         self.pub_key.as_ref()
     }
+
+    fn ecdh(&self, reality_public_key: [u8; 32]) -> Result<[u8; 32], Error> {
+        if self.group() != NamedGroup::X25519 {
+            return Err(Error::General("unsupported key exchange algorithm".into()));
+        }
+
+        let auth_key = super::ring_shim::agree_ephemeral_ref(
+            &self.priv_key,
+            agreement::UnparsedPublicKey::new(self.agreement_algorithm, reality_public_key),
+        )
+        .map_err(|_| GetRandomFailed)?;
+
+        // // FIXME: remove log here for security reasons
+        // crate::log::trace!("REALITY: ecdh: authKey = {auth_key:?}");
+
+        Ok(auth_key)
+    }
 }
 
 #[cfg(test)]

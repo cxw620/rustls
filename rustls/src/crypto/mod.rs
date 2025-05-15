@@ -56,6 +56,9 @@ pub use crate::msgs::handshake::KeyExchangeAlgorithm;
 pub use crate::rand::GetRandomFailed;
 pub use crate::suites::CipherSuiteCommon;
 
+#[cfg(feature = "reality")]
+mod reality;
+
 /// Controls core cryptography used by rustls.
 ///
 /// This crate comes with two built-in options, provided as
@@ -573,6 +576,11 @@ pub trait ActiveKeyExchange: Send + Sync {
     /// For FFDHE, the encoding required is defined in
     /// [RFC8446 section 4.2.8.1](https://www.rfc-editor.org/rfc/rfc8446#section-4.2.8.1).
     fn pub_key(&self) -> &[u8];
+
+    /// For REALITY key exchange, this function returns the public key
+    fn ecdh(&self, _reality_public_key: [u8; 32]) -> Result<[u8; 32], Error> {
+        Err(Error::General("unsupported key exchange algorithm".into()))
+    }
 
     /// FFDHE group the `ActiveKeyExchange` is operating in.
     ///

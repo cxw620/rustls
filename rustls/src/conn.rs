@@ -472,6 +472,22 @@ impl<Data> ConnectionCommon<Data> {
         self.core.dangerous_extract_secrets()
     }
 
+    /// Extract secrets and a [`KernelConnection`] object.
+    ///
+    /// This allows you use rustls to manage keys and then manage encryption and
+    /// decryption yourself (e.g. for kTLS).
+    ///
+    /// Should be used with care as it exposes secret key material.
+    ///
+    /// See the [`crate::kernel`] documentations for details on prerequisites
+    /// for calling this method.
+    pub fn dangerous_into_kernel_connection(
+        self,
+    ) -> Result<(ExtractedSecrets, KernelConnection<Data>), Error> {
+        self.core
+            .dangerous_into_kernel_connection()
+    }
+
     /// Sets a limit on the internal buffers used to buffer
     /// unsent plaintext (prior to completing the TLS handshake)
     /// and unsent TLS records.  This limit acts only on application

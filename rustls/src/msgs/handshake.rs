@@ -170,6 +170,21 @@ impl Codec<'_> for SessionId {
 }
 
 impl SessionId {
+    #[cfg(feature = "reality")]
+    pub(crate) fn new(data: &[u8]) -> Self {
+        let mut d = [0u8; 32];
+        d.copy_from_slice(data);
+        Self { data: d, len: 32 }
+    }
+
+    #[cfg(feature = "reality")]
+    pub(crate) fn new_zeroed() -> Self {
+        Self {
+            data: [0u8; 32],
+            len: 32,
+        }
+    }
+
     pub fn random(secure_random: &dyn SecureRandom) -> Result<Self, rand::GetRandomFailed> {
         let mut data = [0u8; 32];
         secure_random.fill(&mut data)?;

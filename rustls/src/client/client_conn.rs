@@ -281,6 +281,13 @@ pub struct ClientConfig {
 
     /// How to offer Encrypted Client Hello (ECH). The default is to not offer ECH.
     pub(super) ech_mode: Option<EchMode>,
+
+    /// REALITY configuration.
+    pub reality: Option<(
+        [u8; 32],     // pubkey
+        u64,          // shortId, 8 bytes
+        (u8, u8, u8), // version x, y, z
+    )>,
 }
 
 impl ClientConfig {
@@ -1020,6 +1027,12 @@ impl std::error::Error for EarlyDataError {}
 pub struct ClientConnectionData {
     pub(super) early_data: EarlyData,
     pub(super) ech_status: EchStatus,
+
+    // TODO: move to single file
+    pub(super) reality_data: Option<(
+        [u8; 32], // authKey
+        bool,
+    )>,
 }
 
 impl ClientConnectionData {
@@ -1027,6 +1040,7 @@ impl ClientConnectionData {
         Self {
             early_data: EarlyData::new(),
             ech_status: EchStatus::NotOffered,
+            reality_data: None,
         }
     }
 }
